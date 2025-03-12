@@ -1,4 +1,4 @@
-const API_URL = "http://localhost:8080";
+const API_URL = "http://23319330-text-analyzer-lb-1368018207.eu-central-1.elb.amazonaws.com/";
 
 const API_ENDPOINTS = {
     COUNT: `${API_URL}/count`,
