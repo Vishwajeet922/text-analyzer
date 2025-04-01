@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { sendEmail } from '../lib/api';
+import { jsPDF } from 'jspdf';
 
 const EmailForm = ({ data, activeTab, searchWord }) => {
   const [email, setEmail] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [result, setResult] = useState({ success: null, message: '' });
 
   const isValidEmail = (email) => {
@@ -11,11 +13,11 @@ const EmailForm = ({ data, activeTab, searchWord }) => {
     return re.test(email);
   };
 
-  const formatEmailBody = () => {
-    let body = '';
+  const formatContent = () => {
+    let content = '';
     
     if (activeTab === 'count' && data) {
-      body = `Text Statistics:\n\n` +
+      content = `Text Statistics:\n\n` +
         `Word Count: ${data.word_count}\n` +
         `Reading Level: ${data.reading_level.toFixed(1)} (Flesch-Kincaid grade level)\n` +
         `Characters (with spaces): ${data.character_count.with_spaces}\n` +
@@ -26,27 +28,91 @@ const EmailForm = ({ data, activeTab, searchWord }) => {
           .map(([word, count]) => `${word} (${count})`)
           .join(', ')}`;
     } else if (activeTab === 'sentiment' && data) {
-      body = `Sentiment Analysis:\n\n` +
+      content = `Sentiment Analysis:\n\n` +
         `Sentiment: ${data.sentiment}\n` +
         `Polarity: ${data.polarity.toFixed(2)}\n` +
         `Subjectivity: ${data.subjectivity.toFixed(2)}`;
     } else if (activeTab === 'meaning' && data) {
-      body = `Word Definition: ${searchWord}\n\n`;
+      content = `Word Definition: ${searchWord}\n\n`;
       
       if (data.phonetic) {
-        body += `Pronunciation: ${data.phonetic}\n\n`;
+        content += `Pronunciation: ${data.phonetic}\n\n`;
       }
       
       data.meanings.forEach((meaning, index) => {
-        body += `${meaning.partOfSpeech}:\n`;
+        content += `${meaning.partOfSpeech}:\n`;
         meaning.definitions.forEach((def, i) => {
-          body += `${i + 1}. ${def}\n`;
+          content += `${i + 1}. ${def}\n`;
         });
-        if (index < data.meanings.length - 1) body += '\n';
+        if (index < data.meanings.length - 1) content += '\n';
       });
     }
     
-    return body;
+    return content;
+  };
+
+  const formatEmailBody = () => {
+    return formatContent();
+  };
+
+  const generatePDF = () => {
+    setIsGeneratingPDF(true);
+    setResult({ success: null, message: '' });
+    
+    // Record start time
+    const startTime = Date.now();
+    
+    try {
+      const content = formatContent();
+      const title = activeTab === 'count' 
+        ? 'Text Statistics' 
+        : activeTab === 'sentiment' 
+          ? 'Sentiment Analysis' 
+          : `Word Definition: ${searchWord}`;
+      
+      // Create the PDF document
+      const doc = new jsPDF();
+      
+      // Add title
+      doc.setFontSize(16);
+      doc.text(title, 20, 20);
+      
+      // Add content
+      doc.setFontSize(12);
+      
+      // Split text into lines to fit PDF width
+      const splitText = doc.splitTextToSize(content, 170);
+      doc.text(splitText, 20, 30);
+      
+      // Generate filename
+      const filename = `text-analysis-${activeTab}-${new Date().toISOString().slice(0,10)}.pdf`;
+      
+      // Calculate how much time has elapsed
+      const elapsedTime = Date.now() - startTime;
+      const remainingTime = Math.max(0, 3000 - elapsedTime);
+      
+      // Ensure "Generating..." shows for at least 3 seconds
+      // and delay the download as well
+      setTimeout(() => {
+        // Download PDF after delay
+        doc.save(filename);
+        
+        setResult({ success: true, message: 'PDF generated successfully!' });
+        setIsGeneratingPDF(false);
+      }, remainingTime);
+      
+    } catch (error) {
+      // For errors, calculate remaining time as well
+      const elapsedTime = Date.now() - startTime;
+      const remainingTime = Math.max(0, 3000 - elapsedTime);
+      
+      setTimeout(() => {
+        setResult({ success: false, message: 'Failed to generate PDF. Please try again.' });
+        setIsGeneratingPDF(false);
+      }, remainingTime);
+      
+      console.error('PDF generation error:', error);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -92,7 +158,7 @@ const EmailForm = ({ data, activeTab, searchWord }) => {
 
   return (
     <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-      <h3 className="text-lg font-medium text-gray-800 mb-3">Share Results via Email</h3>
+      <h3 className="text-lg font-medium text-gray-800 mb-3">Share Results</h3>
       
       <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3">
         <div className="flex-grow">
@@ -119,6 +185,17 @@ const EmailForm = ({ data, activeTab, searchWord }) => {
           }`}
         >
           {isSending ? 'Sending...' : 'Send Email'}
+        </button>
+        
+        <button
+          type="button"
+          onClick={generatePDF}
+          disabled={isGeneratingPDF}
+          className={`px-4 py-2 bg-green-600 text-white rounded-md ${
+            isGeneratingPDF ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-700'
+          }`}
+        >
+          {isGeneratingPDF ? 'Generating...' : 'Download PDF'}
         </button>
       </form>
       
